@@ -2,10 +2,8 @@ var express = require('express');
 var router = express.Router();
 var request = require("sync-request");
 
-var cityList = [
-  {name: "Paris", desc: "couvert", img: "/images/picto-1.png", temp_min: 14, temp_max: 14},
-  {name: "Lyon", desc: "nuageux", img: "/images/picto-1.png", temp_min: 14, temp_max: 14}
-]
+var cityModel = require('../models/cities')
+var userModel = require('../models/users')
 
 
 // GET home page
@@ -15,39 +13,81 @@ router.get('/', function(req, res, next) {
 
 
 // GET weather page
-router.get('/weather', function(req, res, next) {
-  res.render('weather', { cityList });
+router.get('/weather', async function(req, res, next) {
+  if(req.session.user == null){
+    res.redirect('/')
+  } else {
+    var cityList = await cityModel.find()
+    res.render('weather', { cityList });
+  }
 });
 
 
 // ADD city to your list
-router.post('/add-city', function(req, res, next) {
+router.post('/add-city', async function(req, res, next) {
   
-  var request = request("GET","https://api.openweathermap.org/data/2.5/weather?q=Auxerre&appid=92862941fe4afacd8c0bdedb902200f7&units=metric&lang=fr");
-  var resultWS = JSON.parse(request.body);
-  console.log(resultWS)
+  var data = request("GET", `https://api.openweathermap.org/data/2.5/weather?q=${req.body.city}&appid=92862941fe4afacd8c0bdedb902200f7&units=metric&lang=fr`);
+  var dataAPI = JSON.parse(data.body);
+  
+  var alreadyExists = await cityModel.findOne({
+    name: req.body.city.toLowerCase()
+  })
 
+    if (alreadyExists === null && dataAPI.name) {
 
+      var newCity = new cityModel({
+        name: req.body.city, 
+        desc: dataAPI.weather[0].description,
+        img: "http://openweathermap.org/img/wn/" + dataAPI.weather[0].icon + ".png",
+        temp_min: dataAPI.main.temp_min,
+        temp_max: dataAPI.main.temp_max,
+        lon: dataAPI.coord.lon,
+        lat: dataAPI.coord.lat
+      })
 
-
-  var alreadyExists = false
-
-  for (var i=0 ; i<cityList.length ; i++){
-    if (cityList[i].name.toLowerCase() == req.body.city.toLowerCase()) {
-      alreadyExists = true
+      await newCity.save()
     }
-  }
-    if (alreadyExists === false) {
-      cityList.push({name:req.body.city, desc: "here", img: "/images/picto-1.png", temp_min: 12, temp_max: 14 })
-    }
+
+    cityList = await cityModel.find()
+
   res.render('weather', { cityList });
 });
 
 
 // DELETE city to your list
-router.get('/delete-city', function(req, res, next) {
-  cityList.splice(req.query.position, 1)
+router.get('/delete-city', async function(req, res, next) {
+  
+  await cityModel.deleteOne({_id: req.query.id})
+
+  var cityList = await cityModel.find()
+
   res.render('weather', { cityList });
 });
 
+
+router.get('/update-cities', async function (req,res,next) {
+
+  var cityList = await cityModel.find()
+
+  for (var i = 0 ; i<cityList.length ; i++) {
+    var data = request("GET", `https://api.openweathermap.org/data/2.5/weather?q=${cityList[i].name}&appid=92862941fe4afacd8c0bdedb902200f7&units=metric&lang=fr`);
+    var dataAPI = JSON.parse(data.body);
+
+    await cityModel.updateOne({
+      _id: cityList[i].id
+    }, {
+      name: cityList[i].name, 
+      desc: dataAPI.weather[0].description,
+      img: "http://openweathermap.org/img/wn/" + dataAPI.weather[0].icon + ".png",
+      temp_min: dataAPI.main.temp_min,
+      temp_max: dataAPI.main.temp_max,
+      lon: dataAPI.coord.lon,
+      lat: dataAPI.coord.lat
+    })
+  }
+
+  var cityList = await cityModel.find()
+
+  res.render('weather', { cityList });
+})
 module.exports = router;

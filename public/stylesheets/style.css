@@ -65,3 +65,12 @@ a {
   margin-top: 60px;
   margin-bottom: 60px;
 }
+
+.updateCities {
+  color: black;
+  margin: 15px;
+}
+
+#map { 
+  height: 400px; 
+}
